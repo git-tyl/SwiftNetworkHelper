@@ -34,7 +34,8 @@ class NetworkHelper {
         session = URLSession(configuration: sessionConfig)
     }
 
-    static func createNSURLRequest(withString urlString:String, dataBody:AnyObject?, requestMethod:String, isJSON:Bool) -> NSMutableURLRequest?{
+    open func createNSURLRequest(withString urlString:String, dataBody:AnyObject?, requestMethod:String, isJSON:Bool) -> NSMutableURLRequest?{
+        
         
         let url:URL? = URL(string: urlString)
         
@@ -47,26 +48,35 @@ class NetworkHelper {
             return nil
         }
         
+        
         if isJSON {
             urlRequest.addValue("application/json", forHTTPHeaderField: "Content-Type")
-            if let dataBody:AnyObject = dataBody {
+            
                 if let dataBodyData = dataBody as? Data {
                     urlRequest.httpBody = dataBodyData
                 }
-            }
+            
         } else {
             urlRequest.addValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-            if let dataBody:AnyObject = dataBody {
-                urlRequest.httpBody = dataBody.data(using: String.Encoding.utf8)
+//            if let dataBody:AnyObject = dataBody { //swift 2
+//                urlRequest.httpBody = dataBody.data(using: String.Encoding.utf8)
+//            }
+            if let dataString:String = dataBody as? String {
+                urlRequest.httpBody = dataString.data(using: .utf8)!
             }
+            
         }
         
+        
+    
         return urlRequest
     }
     
-    static func request(mutableURLRequest:NSMutableURLRequest, success: @escaping (_ data:Data?,_ response:URLResponse?,_ error:NSError?)->Void, failure: @escaping (_ data:Data?,_ response:URLResponse?,_ error:NSError?, _ responseCode:Int)->Void){
+    
+    open func request(mutableURLRequest:NSMutableURLRequest, success: @escaping (_ data:Data?,_ response:URLResponse?,_ error:Error?)->Void, failure: @escaping (_ data:Data?,_ response:URLResponse?,_ error:Error?,_ responseCode:Int)->Void){
         
-        let dataTask:URLSessionDataTask = NetworkHelper.sharedInstance.session.dataTask(with: mutableURLRequest, completionHandler: { (dataInternal, responseInteral, errorInternal) in
+        
+        let dataTask:URLSessionDataTask = NetworkHelper.sharedInstance.session.dataTask(with: mutableURLRequest as URLRequest, completionHandler: { (dataInternal, responseInteral, errorInternal) in
             
             let HTTPResponse:HTTPURLResponse? = responseInteral as? HTTPURLResponse
             let responseCode:Int
@@ -78,9 +88,11 @@ class NetworkHelper {
             }
             
             if  errorInternal != nil || responseCode != 200 {
-                failure(data: dataInternal,response: responseInteral,error: errorInternal,responseCode: responseCode)
+//                failure(data: dataInternal,response: responseInteral,error: errorInternal,responseCode: responseCode)
+                failure(dataInternal,responseInteral,errorInternal as NSError?,responseCode)
             } else {
-                success(data: dataInternal, response:  responseInteral,error: errorInternal)
+//                success(data: dataInternal, response:  responseInteral,error: errorInternal)
+                success(dataInternal,responseInteral,errorInternal)
             }
         }) 
         
@@ -89,7 +101,7 @@ class NetworkHelper {
     
 //combination of two methods above
 //This takes a urlstring that can either be a JSON or not
-    static func request(urlString:String, dataBody:AnyObject?, requestMethod:String, isJSON:Bool, success:@escaping (_ data:Data?, _ response:URLResponse?, _ error:NSError?)->Void, failure:@escaping (_ data:Data?, _ response:URLResponse?, _ error:NSError?, _ responseCode:Int)->Void){
+    open func request(urlString:String, dataBody:AnyObject?, requestMethod:String, isJSON:Bool, success:@escaping (_ data:Data?, _ response:URLResponse?, _ error:Error?)->Void, failure:@escaping (_ data:Data?, _ response:URLResponse?, _ error:Error?, _ responseCode:Int)->Void){
         let urlRequst:NSMutableURLRequest? = createNSURLRequest(withString: urlString, dataBody: dataBody, requestMethod: requestMethod, isJSON: isJSON)
         
         if let urlRequst = urlRequst {
@@ -97,32 +109,32 @@ class NetworkHelper {
         }
     }
     
-    static func jsonBaseRequest(urlString:String,dataBody:AnyObject?, requestMethod:String,  success:@escaping (_ json:AnyObject, _ response:URLResponse?, _ error:NSError?)->Void, failure:@escaping (_ json:AnyObject?, _ response:URLResponse?, _ error:NSError?, _ responseCode:Int)->Void){
+    open func jsonBaseRequest(urlString:String,dataBody:AnyObject?, requestMethod:String,  success:@escaping (_ json:Any, _ response:URLResponse?, _ error:NSError?)->Void, failure:@escaping (_ json:Any?, _ response:URLResponse?, _ error:Error?, _ responseCode:Int)->Void){
         
         request(urlString:urlString,dataBody: dataBody,requestMethod:requestMethod,isJSON:true,
-            success: {(dataInternal:Data?, responseInternal:URLResponse?, errorInternal:NSError?)->Void in
+            success: {(dataInternal:Data?, responseInternal:URLResponse?, errorInternal:Error?)->Void in
                 guard let dataInternal = dataInternal else {
                     failure(nil,responseInternal,nil,ResponseCode.NoJSONData)
                     return
                 }
                 do {
-                    let json:AnyObject = try JSONSerialization.jsonObject(with: dataInternal, options: .mutableContainers )
+                    let json:Any = try JSONSerialization.jsonObject(with: dataInternal, options: .mutableContainers )
                     success(json, responseInternal, nil)
                 } catch let JSONError as NSError{
                     failure(dataInternal as AnyObject?,responseInternal,JSONError,ResponseCode.DifficultyParsingJSON)
                     return
                 }
             },
-            failure: {(dataInternal:Data?, responseInternal:URLResponse?, errorInternal:NSError?,responseCodeInternal:Int )->Void in
+            failure: {(dataInternal:Data?, responseInternal:URLResponse?, errorInternal:Error?,responseCodeInternal:Int )->Void in
                 guard let dataInternal = dataInternal else {
                     failure(nil,responseInternal,nil,responseCodeInternal)
                     return
                 }
                 
                 do {
-                    let json:AnyObject = try JSONSerialization.jsonObject(with: dataInternal, options: .mutableContainers )
+                    let json:Any = try JSONSerialization.jsonObject(with: dataInternal, options: .mutableContainers )
                     failure(json, responseInternal, nil,responseCodeInternal)
-                } catch let JSONError as NSError{
+                } catch let JSONError{
                     failure(nil,responseInternal,JSONError,responseCodeInternal)
                     return
                 }
@@ -130,55 +142,21 @@ class NetworkHelper {
         )
     }
     
-    static func jsonGetRequest(urlString:String,success:@escaping (_ json:AnyObject, _ response:URLResponse?, _ error:NSError?)->Void, failure:@escaping (_ json:AnyObject?, _ response:URLResponse?, _ error:NSError?, _ responseCode:Int)->Void){
+    open func jsonGetRequest(urlString:String,success:@escaping (_ json:Any, _ response:URLResponse?, _ error:NSError?)->Void, failure:@escaping (_ json:Any?, _ response:URLResponse?, _ error:Error?, _ responseCode:Int)->Void){
         jsonBaseRequest(urlString: urlString, dataBody: nil, requestMethod: "GET", success: success, failure: failure)
     }
     
-    static func jsonPost(urlString:String, databody:AnyObject?, success:@escaping (_ json:AnyObject, _ response:URLResponse?, _ error:NSError?)->Void, failure:@escaping (_ json:AnyObject?, _ response:URLResponse?, _ error:NSError?, _ responseCode:Int)->Void){
+    open func jsonPost(urlString:String, databody:AnyObject?, success:@escaping (_ json:Any, _ response:URLResponse?, _ error:Error?)->Void, failure:@escaping (_ json:Any?, _ response:URLResponse?, _ error:Error?, _ responseCode:Int)->Void){
         jsonBaseRequest(urlString: urlString, dataBody: databody, requestMethod: "POST", success: success, failure: failure)
     }
     
-    static func jsonDelete(urlString:String, success:@escaping (_ json:AnyObject, _ response:URLResponse?, _ error:NSError?)->Void, failure:@escaping (_ json:AnyObject?, _ response:URLResponse?, _ error:NSError?, _ responseCode:Int)->Void){
+    open func jsonDelete(urlString:String, success:@escaping (_ json:Any, _ response:URLResponse?, _ error:NSError?)->Void, failure:@escaping (_ json:Any?, _ response:URLResponse?, _ error:Error?, _ responseCode:Int)->Void){
         jsonBaseRequest(urlString: urlString, dataBody: nil, requestMethod: "DELETE", success: success, failure: failure)
     }
     
-    //download
+    //download To Do
     
-    static func download(){
+    open func download(){
         
     }
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
 }
