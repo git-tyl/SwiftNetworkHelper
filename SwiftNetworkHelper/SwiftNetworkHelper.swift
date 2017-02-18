@@ -7,7 +7,7 @@
 //
 
 import Foundation
-
+//updated for swift 3
 
 class NetworkHelper {
     
@@ -23,25 +23,25 @@ class NetworkHelper {
     //One NSURTask Per Request
     //more info on this WWDC 2013 session 705
     //therefore we create one singleton that will be used by all session task
-    let session:NSURLSession
+    let session:URLSession
     
     init(){
-        let sessionConfig = NSURLSessionConfiguration.defaultSessionConfiguration()
+        let sessionConfig = URLSessionConfiguration.default
         sessionConfig.timeoutIntervalForRequest = NetworkHelper.TimeOutInterval
         sessionConfig.timeoutIntervalForResource = NetworkHelper.TimeOutInterval
         //http://www.drdobbs.com/architecture-and-design/memory-leaks-in-ios-7/240168600  stops any memory leaks
-        sessionConfig.URLCache = NSURLCache(memoryCapacity: 0, diskCapacity: 0, diskPath: "URLCache")
-        session = NSURLSession(configuration: sessionConfig)
+        sessionConfig.urlCache = URLCache(memoryCapacity: 0, diskCapacity: 0, diskPath: "URLCache")
+        session = URLSession(configuration: sessionConfig)
     }
 
     static func createNSURLRequest(withString urlString:String, dataBody:AnyObject?, requestMethod:String, isJSON:Bool) -> NSMutableURLRequest?{
         
-        let url:NSURL? = NSURL(string: urlString)
+        let url:URL? = URL(string: urlString)
         
         let urlRequest:NSMutableURLRequest
         
         if let url = url {
-            urlRequest = NSMutableURLRequest(URL:url)
+            urlRequest = NSMutableURLRequest(url:url)
         } else {
             print("DEBUG url string cannot be converted to url")
             return nil
@@ -50,28 +50,28 @@ class NetworkHelper {
         if isJSON {
             urlRequest.addValue("application/json", forHTTPHeaderField: "Content-Type")
             if let dataBody:AnyObject = dataBody {
-                if let dataBodyData = dataBody as? NSData {
-                    urlRequest.HTTPBody = dataBodyData
+                if let dataBodyData = dataBody as? Data {
+                    urlRequest.httpBody = dataBodyData
                 }
             }
         } else {
             urlRequest.addValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
             if let dataBody:AnyObject = dataBody {
-                urlRequest.HTTPBody = dataBody.dataUsingEncoding(NSUTF8StringEncoding)
+                urlRequest.httpBody = dataBody.data(using: String.Encoding.utf8)
             }
         }
         
         return urlRequest
     }
     
-    static func request(mutableURLRequest mutableURLRequest:NSMutableURLRequest, success: (data:NSData?,response:NSURLResponse?,error:NSError?)->Void, failure: (data:NSData?,response:NSURLResponse?,error:NSError?, responseCode:Int)->Void){
+    static func request(mutableURLRequest:NSMutableURLRequest, success: @escaping (_ data:Data?,_ response:URLResponse?,_ error:NSError?)->Void, failure: @escaping (_ data:Data?,_ response:URLResponse?,_ error:NSError?, _ responseCode:Int)->Void){
         
-        let dataTask:NSURLSessionDataTask = NetworkHelper.sharedInstance.session.dataTaskWithRequest(mutableURLRequest) { (dataInternal, responseInteral, errorInternal) in
+        let dataTask:URLSessionDataTask = NetworkHelper.sharedInstance.session.dataTask(with: mutableURLRequest, completionHandler: { (dataInternal, responseInteral, errorInternal) in
             
-            let HTTPResponse:NSHTTPURLResponse? = responseInteral as? NSHTTPURLResponse
+            let HTTPResponse:HTTPURLResponse? = responseInteral as? HTTPURLResponse
             let responseCode:Int
             
-            if let HTTPResponse:NSHTTPURLResponse = HTTPResponse {
+            if let HTTPResponse:HTTPURLResponse = HTTPResponse {
                 responseCode = HTTPResponse.statusCode
             } else {
                 responseCode = 0
@@ -82,14 +82,14 @@ class NetworkHelper {
             } else {
                 success(data: dataInternal, response:  responseInteral,error: errorInternal)
             }
-        }
+        }) 
         
         dataTask.resume()
     }
     
 //combination of two methods above
 //This takes a urlstring that can either be a JSON or not
-    static func request(urlString urlString:String, dataBody:AnyObject?, requestMethod:String, isJSON:Bool, success:(data:NSData?, response:NSURLResponse?, error:NSError?)->Void, failure:(data:NSData?, response:NSURLResponse?, error:NSError?, responseCode:Int)->Void){
+    static func request(urlString:String, dataBody:AnyObject?, requestMethod:String, isJSON:Bool, success:@escaping (_ data:Data?, _ response:URLResponse?, _ error:NSError?)->Void, failure:@escaping (_ data:Data?, _ response:URLResponse?, _ error:NSError?, _ responseCode:Int)->Void){
         let urlRequst:NSMutableURLRequest? = createNSURLRequest(withString: urlString, dataBody: dataBody, requestMethod: requestMethod, isJSON: isJSON)
         
         if let urlRequst = urlRequst {
@@ -97,48 +97,48 @@ class NetworkHelper {
         }
     }
     
-    static func jsonBaseRequest(urlString urlString:String,dataBody:AnyObject?, requestMethod:String,  success:(json:AnyObject, response:NSURLResponse?, error:NSError?)->Void, failure:(json:AnyObject?, response:NSURLResponse?, error:NSError?, responseCode:Int)->Void){
+    static func jsonBaseRequest(urlString:String,dataBody:AnyObject?, requestMethod:String,  success:@escaping (_ json:AnyObject, _ response:URLResponse?, _ error:NSError?)->Void, failure:@escaping (_ json:AnyObject?, _ response:URLResponse?, _ error:NSError?, _ responseCode:Int)->Void){
         
         request(urlString:urlString,dataBody: dataBody,requestMethod:requestMethod,isJSON:true,
-            success: {(dataInternal:NSData?, responseInternal:NSURLResponse?, errorInternal:NSError?)->Void in
+            success: {(dataInternal:Data?, responseInternal:URLResponse?, errorInternal:NSError?)->Void in
                 guard let dataInternal = dataInternal else {
-                    failure(json:nil,response:responseInternal,error:nil,responseCode:ResponseCode.NoJSONData)
+                    failure(nil,responseInternal,nil,ResponseCode.NoJSONData)
                     return
                 }
                 do {
-                    let json:AnyObject = try NSJSONSerialization.JSONObjectWithData(dataInternal, options: .MutableContainers )
-                    success(json:json, response: responseInternal, error: nil)
+                    let json:AnyObject = try JSONSerialization.jsonObject(with: dataInternal, options: .mutableContainers )
+                    success(json, responseInternal, nil)
                 } catch let JSONError as NSError{
-                    failure(json:dataInternal,response: responseInternal,error: JSONError,responseCode: ResponseCode.DifficultyParsingJSON)
+                    failure(dataInternal as AnyObject?,responseInternal,JSONError,ResponseCode.DifficultyParsingJSON)
                     return
                 }
             },
-            failure: {(dataInternal:NSData?, responseInternal:NSURLResponse?, errorInternal:NSError?,responseCodeInternal:Int )->Void in
+            failure: {(dataInternal:Data?, responseInternal:URLResponse?, errorInternal:NSError?,responseCodeInternal:Int )->Void in
                 guard let dataInternal = dataInternal else {
-                    failure(json:nil,response:responseInternal,error:nil,responseCode:responseCodeInternal)
+                    failure(nil,responseInternal,nil,responseCodeInternal)
                     return
                 }
                 
                 do {
-                    let json:AnyObject = try NSJSONSerialization.JSONObjectWithData(dataInternal, options: .MutableContainers )
-                    failure(json:json, response: responseInternal, error: nil,responseCode: responseCodeInternal)
+                    let json:AnyObject = try JSONSerialization.jsonObject(with: dataInternal, options: .mutableContainers )
+                    failure(json, responseInternal, nil,responseCodeInternal)
                 } catch let JSONError as NSError{
-                    failure(json:nil,response: responseInternal,error: JSONError,responseCode: responseCodeInternal)
+                    failure(nil,responseInternal,JSONError,responseCodeInternal)
                     return
                 }
             }
         )
     }
     
-    static func jsonGetRequest(urlString urlString:String,success:(json:AnyObject, response:NSURLResponse?, error:NSError?)->Void, failure:(json:AnyObject?, response:NSURLResponse?, error:NSError?, responseCode:Int)->Void){
+    static func jsonGetRequest(urlString:String,success:@escaping (_ json:AnyObject, _ response:URLResponse?, _ error:NSError?)->Void, failure:@escaping (_ json:AnyObject?, _ response:URLResponse?, _ error:NSError?, _ responseCode:Int)->Void){
         jsonBaseRequest(urlString: urlString, dataBody: nil, requestMethod: "GET", success: success, failure: failure)
     }
     
-    static func jsonPost(urlString urlString:String, databody:AnyObject?, success:(json:AnyObject, response:NSURLResponse?, error:NSError?)->Void, failure:(json:AnyObject?, response:NSURLResponse?, error:NSError?, responseCode:Int)->Void){
+    static func jsonPost(urlString:String, databody:AnyObject?, success:@escaping (_ json:AnyObject, _ response:URLResponse?, _ error:NSError?)->Void, failure:@escaping (_ json:AnyObject?, _ response:URLResponse?, _ error:NSError?, _ responseCode:Int)->Void){
         jsonBaseRequest(urlString: urlString, dataBody: databody, requestMethod: "POST", success: success, failure: failure)
     }
     
-    static func jsonDelete(urlString urlString:String, success:(json:AnyObject, response:NSURLResponse?, error:NSError?)->Void, failure:(json:AnyObject?, response:NSURLResponse?, error:NSError?, responseCode:Int)->Void){
+    static func jsonDelete(urlString:String, success:@escaping (_ json:AnyObject, _ response:URLResponse?, _ error:NSError?)->Void, failure:@escaping (_ json:AnyObject?, _ response:URLResponse?, _ error:NSError?, _ responseCode:Int)->Void){
         jsonBaseRequest(urlString: urlString, dataBody: nil, requestMethod: "DELETE", success: success, failure: failure)
     }
     
